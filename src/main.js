@@ -1,3 +1,5 @@
+// ✅ 完整版：Three.js SU7 模型展示 + 操作控制 + 道路边缘墙 + 碰撞检测
+
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -6,88 +8,116 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x111111);
 
-// 相机设置
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(0, 5, 8);
 
-// 渲染器
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// 天空设置
-const baseUrl = import.meta.env.BASE_URL; // Vite 自动处理
+const baseUrl = import.meta.env.BASE_URL;
 const rgbeLoader = new RGBELoader();
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 pmremGenerator.compileEquirectangularShader();
+
 rgbeLoader.load(
   `${baseUrl}textures/sky.hdr`,
   (hdrTexture) => {
     const envMap = pmremGenerator.fromEquirectangular(hdrTexture).texture;
-
-    scene.environment = envMap; // 用于反射和 PBR
-    scene.background = envMap; // 可选：用作背景
-
+    scene.environment = envMap;
+    scene.background = envMap;
     hdrTexture.dispose();
     pmremGenerator.dispose();
   },
   undefined,
-  (error) => {
-    console.warn('加载 sky.hdr 失败:', error);
-    // 这里可以继续执行，比如使用默认背景或不设置
-  }
+  (error) => console.warn('加载 sky.hdr 失败:', error)
 );
 
-// 地面贴图也加上错误处理
 const textureLoader = new THREE.TextureLoader();
-
-const asphaltDiffuse = textureLoader.load(
-  `${baseUrl}textures/c.jpg`,
-  undefined,
-  undefined,
-  (error) => {
-    console.warn('加载 c.jpg 失败:', error);
-    // 这里可以设置一个默认贴图，或什么都不做
-  }
-);
-const asphaltNormal = textureLoader.load(
-  `${baseUrl}textures/a.jpg`,
-  undefined,
-  undefined,
-  (error) => {
-    console.warn('加载 a.jpg 失败:', error);
-  }
-);
-
-
-// 让贴图重复平铺，避免拉伸
+const asphaltDiffuse = textureLoader.load(`${baseUrl}textures/brick_pavement_02_diff_1k.jpg`, undefined, undefined, e => console.warn('加载 c.jpg 失败:', e));
+const asphaltNormal = textureLoader.load(`${baseUrl}textures/brick_pavement_02_disp_1k.jpg`, undefined, undefined, e => console.warn('加载 a.jpg 失败:', e));
 asphaltDiffuse.wrapS = asphaltDiffuse.wrapT = THREE.RepeatWrapping;
 asphaltNormal.wrapS = asphaltNormal.wrapT = THREE.RepeatWrapping;
 asphaltDiffuse.repeat.set(20, 20);
 asphaltNormal.repeat.set(20, 20);
 
-const planeGeometry = new THREE.PlaneGeometry(50, 50);
-const planeMaterial = new THREE.MeshStandardMaterial({
-  map: asphaltDiffuse,
-  normalMap: asphaltNormal,
-  metalness: 0.2,
-  roughness: 0.8,
-});
-const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+const plane = new THREE.Mesh(
+  new THREE.PlaneGeometry(50, 50),
+  new THREE.MeshStandardMaterial({ map: asphaltDiffuse, normalMap: asphaltNormal, metalness: 0.2, roughness: 0.8 })
+);
 plane.rotation.x = -Math.PI / 2;
 plane.receiveShadow = true;
 scene.add(plane);
 
-// 光照
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 scene.add(ambientLight);
-
 const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
 directionalLight.position.set(5, 10, 7);
 directionalLight.castShadow = true;
 scene.add(directionalLight);
 
-// 操作说明
+const obstacles = [];
+
+// 加载贴图
+const wallDiffuse = textureLoader.load(
+  `${baseUrl}textures/concrete_pavement_diff_1k.jpg`,
+  undefined,
+  undefined,
+  (error) => console.warn('加载 wall diffuse 失败:', error)
+);
+
+const wallDisplace = textureLoader.load(
+  `${baseUrl}textures/concrete_pavement_disp_1k.png`,
+  undefined,
+  undefined,
+  (error) => console.warn('加载 wall displacement 失败:', error)
+);
+
+// 设置贴图平铺
+wallDiffuse.wrapS = wallDiffuse.wrapT = THREE.RepeatWrapping;
+wallDisplace.wrapS = wallDisplace.wrapT = THREE.RepeatWrapping;
+wallDiffuse.repeat.set(2, 1);
+wallDisplace.repeat.set(2, 1);
+
+// 创建墙体材质
+const wallMaterial = new THREE.MeshStandardMaterial({
+  map: wallDiffuse,
+  displacementMap: wallDisplace,
+  displacementScale: 0.15,
+  metalness: 0.2,
+  roughness: 0.8,
+});
+
+// 创建墙体函数
+function createWall (x, y, z, w, h, d) {
+  const geometry = new THREE.BoxGeometry(w, h, d, 64, 64, 1); // 加细分显示凹凸
+  const wall = new THREE.Mesh(geometry, wallMaterial);
+  wall.position.set(x, y, z);
+  wall.castShadow = wall.receiveShadow = true;
+  scene.add(wall);
+
+  const box = new THREE.Box3().setFromObject(wall);
+  obstacles.push(box);
+}
+
+// 添加四面墙
+const wallH = 2;
+const wallT = 1;
+const size = 50;
+
+const halfSize = size / 2;
+const halfT = wallT / 2;
+
+// 前后墙（沿 X 轴摆放）
+createWall(0, wallH / 2, -halfSize - halfT, size + wallT, wallH, wallT); // 前
+createWall(0, wallH / 2, halfSize + halfT, size + wallT, wallH, wallT); // 后
+
+// 左右墙（沿 Z 轴摆放）
+createWall(-halfSize - halfT, wallH / 2, 0, wallT, wallH, size + wallT); // 左
+createWall(halfSize + halfT, wallH / 2, 0, wallT, wallH, size + wallT); // 右
+
+
+
 const helpPanel = document.createElement('div');
 helpPanel.style.position = 'absolute';
 helpPanel.style.top = '20px';
@@ -106,7 +136,6 @@ helpPanel.innerHTML = `
   - Q/E：车体前倾/后仰<br/>
   - Shift：加速<br/>
   - Space：跳跃<br/>
-  - <strong>R：重置位置</strong><br/>
   <br/>
   <button id="toggleHelp" style="
     margin-top: 5px;
@@ -166,12 +195,24 @@ showHintBtn.addEventListener('click', () => {
 });
 
 
+toggleBtn.onclick = () => {
+  helpVisible = false;
+  helpPanel.style.opacity = '0';
+  helpPanel.style.pointerEvents = 'none';
+  toggleBtn.style.display = 'none';
+  showHintBtn.style.display = 'block';
+};
+showHintBtn.onclick = () => {
+  helpVisible = true;
+  helpPanel.style.opacity = '1';
+  helpPanel.style.pointerEvents = 'auto';
+  toggleBtn.style.display = 'inline-block';
+  showHintBtn.style.display = 'none';
+};
 
-// 控制器
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-// 载入汽车模型
 const loader = new GLTFLoader();
 let carModel = null;
 loader.load('./models/su7-xiaomini.glb', gltf => {
@@ -180,78 +221,44 @@ loader.load('./models/su7-xiaomini.glb', gltf => {
   carModel.castShadow = true;
   scene.add(carModel);
   loadingText.style.display = 'none';
-}, undefined, error => {
-  console.error(error);
-});
+}, undefined, e => console.error(e));
 
-// 提示加载中
 const loadingText = document.createElement('div');
-loadingText.style.position = 'absolute';
-loadingText.style.top = '20px';
-loadingText.style.left = '20px';
-loadingText.style.color = '#fff';
 loadingText.innerText = '🚗 加载中...';
+Object.assign(loadingText.style, { position: 'absolute', top: '20px', left: '20px', color: '#fff' });
 document.body.appendChild(loadingText);
 
-const keys = {
-  KeyW: false,
-  KeyS: false,
-  KeyA: false,
-  KeyD: false,
-  KeyQ: false,
-  KeyE: false,
-  Space: false,
-  ShiftLeft: false,
-  ShiftRight: false,
-};
-
+const keys = { KeyW: false, KeyS: false, KeyA: false, KeyD: false, KeyQ: false, KeyE: false, Space: false, ShiftLeft: false, ShiftRight: false };
 window.addEventListener('keydown', e => {
   if (e.code in keys) keys[e.code] = true;
-  // R 键：重置模型位置和角度
   if (e.code === 'KeyR' && carModel) {
     carModel.position.set(0, 0, 0);
     carModel.rotation.set(0, 0, 0);
-    carModel.position.y = 0;
     isJumping = false;
   }
 });
+window.addEventListener('keyup', e => { if (e.code in keys) keys[e.code] = false });
 
-window.addEventListener('keyup', e => {
-  if (e.code in keys) keys[e.code] = false;
-});
-// 移动参数
-const speed = 0.1;
-const runMultiplier = 5; // 跑步时速度倍数
-const rotationSpeed = 0.03;
-
-// 跳跃参数
-let isJumping = false;
-let jumpStartTime = 0;
-const jumpDuration = 600; // 毫秒
-const jumpHeight = 1.2;
-
-// 碰撞检测辅助盒子
+let isJumping = false, jumpStartTime = 0;
+const jumpDuration = 600, jumpHeight = 1.2;
+const speed = 0.1, runMultiplier = 5, rotationSpeed = 0.03;
 const carBox = new THREE.Box3();
-const obstacles = []; // 以后可加障碍物模型加入数组
 
-// 简易碰撞检测函数
 function checkCollision (newPos) {
-  // 目前只有地面，没有障碍，始终返回 false（无碰撞）
-  // 你可以扩展此函数实现碰撞判断
-  return false;
+  if (!carModel) return false;
+  carBox.setFromObject(carModel);
+  carBox.translate(newPos.clone().sub(carModel.position));
+  return obstacles.some(ob => carBox.intersectsBox(ob));
 }
 
 function animate (time = 0) {
   requestAnimationFrame(animate);
-
   if (carModel) {
-    // 处理跳跃动画
     if (isJumping) {
-      const elapsed = time - jumpStartTime;
-      if (elapsed < jumpDuration) {
-        // 用正弦曲线模拟跳跃
-        const jumpProgress = elapsed / jumpDuration;
-        carModel.position.y = Math.sin(jumpProgress * Math.PI) * jumpHeight;
+      const t = time - jumpStartTime;
+      if (t < jumpDuration) {
+        const p = t / jumpDuration;
+        carModel.position.y = Math.sin(p * Math.PI) * jumpHeight;
       } else {
         carModel.position.y = 0;
         isJumping = false;
@@ -261,56 +268,27 @@ function animate (time = 0) {
       jumpStartTime = time;
     }
 
-    // 处理移动与旋转
-    // let moveForward = keys.KeyW ? currentSpeed : 0;
-    // let moveBackward = keys.KeyS ? currentSpeed : 0;
-    // let rotateLeft = keys.ArrowLeft ? rotationSpeed : 0;
-    // let rotateRight = keys.ArrowRight ? rotationSpeed : 0;
+    const run = keys.ShiftLeft || keys.ShiftRight;
+    const curSpeed = speed * (run ? runMultiplier : 1);
+    const moveF = keys.KeyW ? curSpeed : 0;
+    const moveB = keys.KeyS ? curSpeed : 0;
+    const rotL = keys.KeyA ? rotationSpeed : 0;
+    const rotR = keys.KeyD ? rotationSpeed : 0;
+    const tiltQ = keys.KeyQ ? rotationSpeed : 0;
+    const tiltE = keys.KeyE ? rotationSpeed : 0;
+    carModel.rotation.z += tiltQ - tiltE;
+    carModel.rotation.y += rotL - rotR;
 
-    // 跑动速度判断
-    const isRunning = keys.ShiftLeft || keys.ShiftRight;
-    const currentSpeed = speed * (isRunning ? runMultiplier : 1);
-
-    let moveForward = keys.KeyW ? currentSpeed : 0;
-    let moveBackward = keys.KeyS ? currentSpeed : 0;
-    let rotateLeft = keys.KeyA ? rotationSpeed : 0;
-    let rotateRight = keys.KeyD ? rotationSpeed : 0;
-    let rotateQ = keys.KeyQ ? rotationSpeed : 0;
-    let rotateE = keys.KeyE ? rotationSpeed : 0;
-
-    carModel.rotation.z += rotateQ - rotateE;
-    carModel.rotation.y += rotateLeft - rotateRight;
-
-    const forwardVector = new THREE.Vector3(1, 0, 0);
-    forwardVector.applyEuler(carModel.rotation);
-    const moveDistance = moveForward - moveBackward;
-
-    const newPos = carModel.position.clone().add(forwardVector.multiplyScalar(moveDistance));
-
-    if (!checkCollision(newPos)) {
-      carModel.position.copy(newPos);
-    }
-
-    // // 计算前进后退新位置
-    // const forwardVector = new THREE.Vector3(0, 0, -1);
-    // forwardVector.applyEuler(carModel.rotation);
-    // const moveDistance = moveForward - moveBackward;
-
-    // const newPos = carModel.position.clone().add(forwardVector.multiplyScalar(moveDistance));
-
-    // 碰撞检测
-    if (!checkCollision(newPos)) {
-      carModel.position.copy(newPos);
-    }
+    const forward = new THREE.Vector3(1, 0, 0).applyEuler(carModel.rotation);
+    const delta = moveF - moveB;
+    const newPos = carModel.position.clone().add(forward.multiplyScalar(delta));
+    if (!checkCollision(newPos)) carModel.position.copy(newPos);
   }
-
   controls.update();
   renderer.render(scene, camera);
 }
-
 animate();
 
-// 窗口自适应
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
