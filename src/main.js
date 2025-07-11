@@ -106,6 +106,7 @@ helpPanel.innerHTML = `
   - Q/E：车体前倾/后仰<br/>
   - Shift：加速<br/>
   - Space：跳跃<br/>
+  - <strong>R：重置位置</strong><br/>
   <br/>
   <button id="toggleHelp" style="
     margin-top: 5px;
@@ -122,10 +123,48 @@ const toggleBtn = document.getElementById('toggleHelp');
 let helpVisible = true;
 toggleBtn.addEventListener('click', () => {
   helpVisible = !helpVisible;
-  helpPanel.style.opacity = helpVisible ? '1' : '0';
-  helpPanel.style.pointerEvents = helpVisible ? 'auto' : 'none';
-  toggleBtn.innerText = helpVisible ? '隐藏说明' : '显示说明';
+
+  if (helpVisible) {
+    helpPanel.style.opacity = '1';
+    helpPanel.style.pointerEvents = 'auto';
+    toggleBtn.innerText = '隐藏说明';
+    toggleBtn.style.display = 'inline-block';
+  } else {
+    helpPanel.style.opacity = '0';
+    helpPanel.style.pointerEvents = 'none';
+    toggleBtn.style.display = 'none'; // 隐藏按钮本身
+
+    // 显示“显示说明”浮动按钮
+    showHintBtn.style.display = 'block';
+  }
 });
+
+// 显示说明按钮
+const showHintBtn = document.createElement('button');
+showHintBtn.innerText = '显示说明';
+showHintBtn.style.position = 'absolute';
+showHintBtn.style.top = '20px';
+showHintBtn.style.right = '20px';
+showHintBtn.style.background = '#222';
+showHintBtn.style.color = '#fff';
+showHintBtn.style.border = 'none';
+showHintBtn.style.padding = '6px 12px';
+showHintBtn.style.borderRadius = '6px';
+showHintBtn.style.cursor = 'pointer';
+showHintBtn.style.zIndex = '1000';
+showHintBtn.style.display = 'none'; // 初始隐藏
+document.body.appendChild(showHintBtn);
+
+// 点击显示说明按钮
+showHintBtn.addEventListener('click', () => {
+  helpVisible = true;
+  helpPanel.style.opacity = '1';
+  helpPanel.style.pointerEvents = 'auto';
+  toggleBtn.innerText = '隐藏说明';
+  toggleBtn.style.display = 'inline-block';
+  showHintBtn.style.display = 'none';
+});
+
 
 
 // 控制器
@@ -168,6 +207,13 @@ const keys = {
 
 window.addEventListener('keydown', e => {
   if (e.code in keys) keys[e.code] = true;
+  // R 键：重置模型位置和角度
+  if (e.code === 'KeyR' && carModel) {
+    carModel.position.set(0, 0, 0);
+    carModel.rotation.set(0, 0, 0);
+    carModel.position.y = 0;
+    isJumping = false;
+  }
 });
 
 window.addEventListener('keyup', e => {
