@@ -4,9 +4,13 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { People } from './person.js'; // 路径按你的目录结构调整
+
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x111111);
+const baseUrl = import.meta.env.BASE_URL;
+const people = new People(scene, baseUrl); // ✅ 现在是安全的
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(0, 5, 8);
@@ -15,7 +19,6 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-const baseUrl = import.meta.env.BASE_URL;
 const rgbeLoader = new RGBELoader();
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 pmremGenerator.compileEquirectangularShader();
@@ -34,8 +37,8 @@ rgbeLoader.load(
 );
 
 const textureLoader = new THREE.TextureLoader();
-const asphaltDiffuse = textureLoader.load(`${baseUrl}textures/brick_pavement_02_diff_1k.jpg`, undefined, undefined, e => console.warn('加载 c.jpg 失败:', e));
-const asphaltNormal = textureLoader.load(`${baseUrl}textures/brick_pavement_02_disp_1k.jpg`, undefined, undefined, e => console.warn('加载 a.jpg 失败:', e));
+const asphaltDiffuse = textureLoader.load(`${baseUrl}textures/brick_pavement_02_disp_1k.png`, undefined, undefined, e => console.warn('加载 c.jpg 失败:', e));
+const asphaltNormal = textureLoader.load(`${baseUrl}textures/brick_pavement_02_diff_1k.jpg`, undefined, undefined, e => console.warn('加载 a.jpg 失败:', e));
 asphaltDiffuse.wrapS = asphaltDiffuse.wrapT = THREE.RepeatWrapping;
 asphaltNormal.wrapS = asphaltNormal.wrapT = THREE.RepeatWrapping;
 asphaltDiffuse.repeat.set(20, 20);
@@ -116,6 +119,22 @@ createWall(0, wallH / 2, halfSize + halfT, size + wallT, wallH, wallT); // 后
 createWall(-halfSize - halfT, wallH / 2, 0, wallT, wallH, size + wallT); // 左
 createWall(halfSize + halfT, wallH / 2, 0, wallT, wallH, size + wallT); // 右
 
+function checkPeopleCollision (offset) {
+  if (!people.model) return false;
+  const predictedBox = people.getPredictedBox(offset);
+  // 和障碍物碰撞检测
+  for (const ob of obstacles) {
+    if (predictedBox.intersectsBox(ob)) return true;
+  }
+  // 和汽车碰撞检测
+  if (carModel) {
+    const carBoxClone = carBox.clone();
+    carBoxClone.translate(carModel.position.clone().sub(carBox.getCenter(new THREE.Vector3())));
+    if (predictedBox.intersectsBox(carBoxClone)) return true;
+  }
+  return false;
+}
+
 
 
 const helpPanel = document.createElement('div');
@@ -131,11 +150,16 @@ helpPanel.style.maxWidth = '220px';
 helpPanel.style.transition = 'opacity 0.3s';
 helpPanel.innerHTML = `
   <b>🕹 操作说明</b><br/>
-  - W/S：前进/后退<br/>
-  - A/D：左转/右转<br/>
+  - W/S：前进/后退（汽车）<br/>
+  - A/D：左转/右转（汽车）<br/>
   - Q/E：车体前倾/后仰<br/>
   - Shift：加速<br/>
-  - Space：跳跃<br/>
+  - Space：跳跃（汽车）<br/>
+  <br/>
+  <b>人物控制</b><br/>
+  - ↑/↓：前进/后退（人物）<br/>
+  - ←/→：左转/右转（人物）<br/>
+  - 0：跳跃（人物）<br/>
   <br/>
   <button id="toggleHelp" style="
     margin-top: 5px;
@@ -253,6 +277,7 @@ function checkCollision (newPos) {
 
 function animate (time = 0) {
   requestAnimationFrame(animate);
+  if (people) people.update(time);
   if (carModel) {
     if (isJumping) {
       const t = time - jumpStartTime;
