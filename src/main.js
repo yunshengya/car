@@ -15,68 +15,68 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// // 天空设置
-// const baseUrl = import.meta.env.BASE_URL; // Vite 自动处理
-// const rgbeLoader = new RGBELoader();
-// const pmremGenerator = new THREE.PMREMGenerator(renderer);
-// pmremGenerator.compileEquirectangularShader();
-// rgbeLoader.load(
-//   `${baseUrl}textures/sky.hdr`,
-//   (hdrTexture) => {
-//     const envMap = pmremGenerator.fromEquirectangular(hdrTexture).texture;
+// 天空设置
+const baseUrl = import.meta.env.BASE_URL; // Vite 自动处理
+const rgbeLoader = new RGBELoader();
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+pmremGenerator.compileEquirectangularShader();
+rgbeLoader.load(
+  `${baseUrl}textures/sky.hdr`,
+  (hdrTexture) => {
+    const envMap = pmremGenerator.fromEquirectangular(hdrTexture).texture;
 
-//     scene.environment = envMap; // 用于反射和 PBR
-//     scene.background = envMap; // 可选：用作背景
+    scene.environment = envMap; // 用于反射和 PBR
+    scene.background = envMap; // 可选：用作背景
 
-//     hdrTexture.dispose();
-//     pmremGenerator.dispose();
-//   },
-//   undefined,
-//   (error) => {
-//     console.warn('加载 sky.hdr 失败:', error);
-//     // 这里可以继续执行，比如使用默认背景或不设置
-//   }
-// );
+    hdrTexture.dispose();
+    pmremGenerator.dispose();
+  },
+  undefined,
+  (error) => {
+    console.warn('加载 sky.hdr 失败:', error);
+    // 这里可以继续执行，比如使用默认背景或不设置
+  }
+);
 
-// // 地面贴图也加上错误处理
-// const textureLoader = new THREE.TextureLoader();
+// 地面贴图也加上错误处理
+const textureLoader = new THREE.TextureLoader();
 
-// const asphaltDiffuse = textureLoader.load(
-//   `${baseUrl}textures/c.jpg`,
-//   undefined,
-//   undefined,
-//   (error) => {
-//     console.warn('加载 c.jpg 失败:', error);
-//     // 这里可以设置一个默认贴图，或什么都不做
-//   }
-// );
-// const asphaltNormal = textureLoader.load(
-//   `${baseUrl}textures/a.jpg`,
-//   undefined,
-//   undefined,
-//   (error) => {
-//     console.warn('加载 a.jpg 失败:', error);
-//   }
-// );
+const asphaltDiffuse = textureLoader.load(
+  `${baseUrl}textures/c.jpg`,
+  undefined,
+  undefined,
+  (error) => {
+    console.warn('加载 c.jpg 失败:', error);
+    // 这里可以设置一个默认贴图，或什么都不做
+  }
+);
+const asphaltNormal = textureLoader.load(
+  `${baseUrl}textures/a.jpg`,
+  undefined,
+  undefined,
+  (error) => {
+    console.warn('加载 a.jpg 失败:', error);
+  }
+);
 
 
-// // 让贴图重复平铺，避免拉伸
-// asphaltDiffuse.wrapS = asphaltDiffuse.wrapT = THREE.RepeatWrapping;
-// asphaltNormal.wrapS = asphaltNormal.wrapT = THREE.RepeatWrapping;
-// asphaltDiffuse.repeat.set(20, 20);
-// asphaltNormal.repeat.set(20, 20);
+// 让贴图重复平铺，避免拉伸
+asphaltDiffuse.wrapS = asphaltDiffuse.wrapT = THREE.RepeatWrapping;
+asphaltNormal.wrapS = asphaltNormal.wrapT = THREE.RepeatWrapping;
+asphaltDiffuse.repeat.set(20, 20);
+asphaltNormal.repeat.set(20, 20);
 
-// const planeGeometry = new THREE.PlaneGeometry(50, 50);
-// const planeMaterial = new THREE.MeshStandardMaterial({
-//   map: asphaltDiffuse,
-//   normalMap: asphaltNormal,
-//   metalness: 0.2,
-//   roughness: 0.8,
-// });
-// const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-// plane.rotation.x = -Math.PI / 2;
-// plane.receiveShadow = true;
-// scene.add(plane);
+const planeGeometry = new THREE.PlaneGeometry(50, 50);
+const planeMaterial = new THREE.MeshStandardMaterial({
+  map: asphaltDiffuse,
+  normalMap: asphaltNormal,
+  metalness: 0.2,
+  roughness: 0.8,
+});
+const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+plane.rotation.x = -Math.PI / 2;
+plane.receiveShadow = true;
+scene.add(plane);
 
 // 光照
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
